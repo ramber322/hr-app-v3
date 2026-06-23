@@ -416,12 +416,12 @@ export default function DashboardApplicant() {
 
        <div className="dashboard-header">
   <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-    <WelcomeIcon size={40} /> 
+    <WelcomeIcon color = {'purple'} size={40} /> 
     Welcome back, {userName}
   </h1>
   <div className="date-display">
   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-    <CalendarIcon size={40} />
+    <CalendarIcon color = {'purple'} size={40} />
     {todayDate}
   </span>
 </div>
