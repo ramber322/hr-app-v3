@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
 import "../styles/DashboardPage.css";
+import { WelcomeIcon, CalendarIcon, MyApplicationsIcon } from "../components/icons/CustomIcons";
 
 // Chart.js imports
 import {

@@ -27,10 +27,114 @@ export default function JobCandidatesPage() {
   const [showExplainModal, setShowExplainModal] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [documentUrls, setDocumentUrls] = useState({});
 
   useEffect(() => {
     loadJobAndCandidates();
   }, [jobId]);
+
+  // =============================================
+  // GET DOCUMENT URL - FINDS FILE BY LISTING FOLDER
+  // =============================================
+  const getDocumentUrl = async (jobId, applicantId, docType) => {
+    try {
+      // List all files in the applicant's folder
+      const { data, error } = await supabase.storage
+        .from('applicant_docs')
+        .list(`${jobId}/${applicantId}`);
+
+      if (error) {
+        console.error('Error listing files:', error);
+        return null;
+      }
+
+      if (!data || data.length === 0) {
+        console.log('No files found in folder');
+        return null;
+      }
+
+      // Find the file that starts with the docType (e.g., "pds", "transcript", "performanceRating")
+      const file = data.find(f => f.name.startsWith(docType));
+
+      if (!file) {
+        console.log(`No file found starting with: ${docType}`);
+        return null;
+      }
+
+      // Get the public URL for the file
+      const filePath = `${jobId}/${applicantId}/${file.name}`;
+      const { data: urlData } = supabase.storage
+        .from('applicant_docs')
+        .getPublicUrl(filePath);
+
+      console.log(`Found ${docType} file:`, file.name);
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error getting document URL:', error);
+      return null;
+    }
+  };
+
+  // =============================================
+  // VIEW DOCUMENT - WITH DOWNLOAD FOR EXCEL/WORD
+  // =============================================
+  const viewDocument = async (jobId, applicantId, docType, docName) => {
+    try {
+      // List files in the folder
+      const { data, error } = await supabase.storage
+        .from('applicant_docs')
+        .list(`${jobId}/${applicantId}`);
+
+      if (error || !data) {
+        alert('Could not find documents folder.');
+        return;
+      }
+
+      // Find all files that start with the docType
+      const matchingFiles = data.filter(f => 
+        f.name.toLowerCase().startsWith(docType.toLowerCase())
+      );
+      
+      if (matchingFiles.length === 0) {
+        alert(`No ${docName} file found.`);
+        console.log('Available files:', data.map(f => f.name));
+        return;
+      }
+
+      // Sort by creation date (newest first)
+      const sortedFiles = matchingFiles.sort((a, b) => {
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+
+      // Get the most recent file
+      const file = sortedFiles[0];
+      const filePath = `${jobId}/${applicantId}/${file.name}`;
+      const { data: urlData } = supabase.storage
+        .from('applicant_docs')
+        .getPublicUrl(filePath);
+
+      // Check file extension
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+      const isWord = file.name.endsWith('.docx') || file.name.endsWith('.doc');
+      const isPDF = file.name.endsWith('.pdf');
+
+      if (isExcel || isWord) {
+        // For Excel/Word files: trigger download directly
+        const link = document.createElement('a');
+        link.href = urlData.publicUrl;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // For PDF and other viewable files: open in new tab
+        window.open(urlData.publicUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      alert('Error viewing document. Please try again.');
+    }
+  };
 
   const loadJobAndCandidates = async () => {
     setLoading(true);
@@ -73,6 +177,24 @@ export default function JobCandidatesPage() {
       applicantsData.forEach(applicant => {
         applicantsMap[applicant.id] = applicant;
       });
+      
+      // Fetch document URLs for each application
+      const docUrls = {};
+      for (const app of applicationsData) {
+        const appId = app.id;
+        docUrls[appId] = {};
+        
+        const docTypes = ['pds', 'transcript', 'performanceRating'];
+        for (const docType of docTypes) {
+          if (app.docs_submitted?.[docType]) {
+            const url = await getDocumentUrl(app.job_id, app.applicant_id, docType);
+            docUrls[appId][docType] = url;
+          } else {
+            docUrls[appId][docType] = null;
+          }
+        }
+      }
+      setDocumentUrls(docUrls);
       
       const candidatesWithRank = applicationsData.map((app, index) => {
         const applicant = applicantsMap[app.applicant_id] || {};
@@ -170,7 +292,9 @@ export default function JobCandidatesPage() {
             summary: aiData.summary || '',
             requirements_met: aiData.requirements_met || '0/0',
             verdict: aiData.verdict || 'NOT FIT'
-          }
+          },
+          job_id: app.job_id,
+          applicant_id: app.applicant_id,
         };
       });
       
@@ -279,7 +403,6 @@ export default function JobCandidatesPage() {
   // EXPORT SHORTLIST TO PDF
   // =============================================
   const exportShortlistPDF = () => {
-    // Get shortlisted or qualified candidates
     const shortlisted = candidates.filter(c => 
       c.status === 'SHORTLISTED' || c.status === 'QUALIFIED'
     );
@@ -293,8 +416,6 @@ export default function JobCandidatesPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
 
-    // === HEADER ===
-    // Agency Name
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('CITY GOVERNMENT OF ILIGAN', pageWidth / 2, 25, { align: 'center' });
@@ -303,11 +424,9 @@ export default function JobCandidatesPage() {
     doc.setFont('helvetica', 'normal');
     doc.text('HUMAN RESOURCE MANAGEMENT OFFICE', pageWidth / 2, 33, { align: 'center' });
 
-    // Divider
     doc.setDrawColor(100);
     doc.line(margin, 38, pageWidth - margin, 38);
 
-    // === TITLE ===
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('SHORTLIST OF QUALIFIED CANDIDATES', pageWidth / 2, 48, { align: 'center' });
@@ -316,7 +435,6 @@ export default function JobCandidatesPage() {
     doc.setFont('helvetica', 'normal');
     doc.text(`For the Position of: ${job?.position_title || 'N/A'}`, pageWidth / 2, 56, { align: 'center' });
 
-    // === DETAILS ===
     const today = new Date().toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'long', 
@@ -329,7 +447,6 @@ export default function JobCandidatesPage() {
     doc.text(`Item No.: ${job?.item_no || 'N/A'}`, margin, 75);
     doc.text(`Total Applicants: ${candidates.length}  |  Shortlisted: ${shortlisted.length}`, margin, 82);
 
-    // === TABLE ===
     const tableData = shortlisted.map((c, index) => [
       index + 1,
       c.applicant_name,
@@ -366,14 +483,11 @@ export default function JobCandidatesPage() {
       margin: { left: margin, right: margin },
     });
 
-    // === FOOTER ===
     const finalY = doc.lastAutoTable.finalY + 15;
 
-    // Divider
     doc.setDrawColor(100);
     doc.line(margin, finalY, pageWidth - margin, finalY);
 
-    // Signatures
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('Prepared by:', margin, finalY + 15);
@@ -387,19 +501,16 @@ export default function JobCandidatesPage() {
     doc.text('HRMO Designate', margin, finalY + 32);
     doc.text('HRMPSB Chairperson', pageWidth - margin - 40, finalY + 32);
 
-    // Certification
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.text('This is a certified true copy of the shortlist.', pageWidth / 2, finalY + 45, { align: 'center' });
 
-    // Watermark
     doc.setFontSize(40);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(200, 200, 200);
     doc.text('FOR HRMPSB REVIEW', pageWidth / 2, 160, { align: 'center', angle: 45 });
     doc.setTextColor(0, 0, 0);
 
-    // === SAVE ===
     doc.save(`Shortlist_${job?.position_title?.replace(/\s+/g, '_') || 'Candidates'}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
@@ -412,10 +523,8 @@ export default function JobCandidatesPage() {
     setUpdatingStatus(true);
     
     try {
-      // Get the old status from selectedApplication
       const oldStatus = selectedApplication?.status || 'PENDING';
       
-      // Get the application to find the applicant_id
       const { data: appData, error: appError } = await supabase
         .from('applications')
         .select('applicant_id, job_id')
@@ -424,7 +533,6 @@ export default function JobCandidatesPage() {
       
       if (appError) throw appError;
       
-      // Get job title for the notification
       const { data: jobData, error: jobError } = await supabase
         .from('job_postings')
         .select('position_title')
@@ -433,7 +541,6 @@ export default function JobCandidatesPage() {
       
       if (jobError) throw jobError;
       
-      // Update the status
       const { error } = await supabase
         .from('applications')
         .update({ 
@@ -446,7 +553,6 @@ export default function JobCandidatesPage() {
       
       console.log('📨 Sending notification to applicant...');
       
-      // Send notification to the APPLICANT (not HR)
       const result = await notifyStatusChange(
         appData.applicant_id,
         jobData.position_title,
@@ -801,7 +907,7 @@ export default function JobCandidatesPage() {
         </div>
       )}
 
-      {/* Application Details Modal */}
+      {/* Application Details Modal - WITH DOCUMENT VIEWING */}
       {showDetailsModal && selectedApplication && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -821,19 +927,94 @@ export default function JobCandidatesPage() {
               </div>
 
               <div className="detail-section">
-                <h4>Documents Status</h4>
+                <h4>📄 Submitted Documents</h4>
                 <ul className="docs-list">
-                  {/* PDS is always required */}
-                  <li>{selectedApplication.docs_submitted?.pds ? '✅' : '❌'} Personal Data Sheet (PDS)</li>
+                  {/* PDS - Always required */}
+                  <li>
+                    {selectedApplication.docs_submitted?.pds ? '✅' : '❌'} Personal Data Sheet (PDS)
+                    {selectedApplication.docs_submitted?.pds && (
+                      <button 
+                        className="view-doc-btn"
+                        onClick={() => viewDocument(
+                          selectedApplication.job_id,
+                          selectedApplication.applicant_id,
+                          'pds',
+                          'PDS'
+                        )}
+                        style={{
+                          marginLeft: '10px',
+                          padding: '2px 10px',
+                          background: '#4f46e5',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                        }}
+                      >
+                        📎 View
+                      </button>
+                    )}
+                  </li>
                   
-                  {/* Only show Transcript if required by the job */}
+                  {/* Transcript - Only if required by job */}
                   {job?.required_docs?.transcriptRecords && (
-                    <li>{selectedApplication.docs_submitted?.transcript ? '✅' : '❌'} Transcript of Records</li>
+                    <li>
+                      {selectedApplication.docs_submitted?.transcript ? '✅' : '❌'} Transcript of Records
+                      {selectedApplication.docs_submitted?.transcript && (
+                        <button 
+                          className="view-doc-btn"
+                          onClick={() => viewDocument(
+                            selectedApplication.job_id,
+                            selectedApplication.applicant_id,
+                            'transcript',
+                            'Transcript'
+                          )}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '2px 10px',
+                            background: '#4f46e5',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                          }}
+                        >
+                          📎 View
+                        </button>
+                      )}
+                    </li>
                   )}
                   
-                  {/* Only show Performance Rating if required by the job */}
+                  {/* Performance Rating - Only if required by job */}
                   {job?.required_docs?.performanceRating && (
-                    <li>{selectedApplication.docs_submitted?.performanceRating ? '✅' : '❌'} Performance Rating</li>
+                    <li>
+                      {selectedApplication.docs_submitted?.performanceRating ? '✅' : '❌'} Performance Rating
+                      {selectedApplication.docs_submitted?.performanceRating && (
+                        <button 
+                          className="view-doc-btn"
+                          onClick={() => viewDocument(
+                            selectedApplication.job_id,
+                            selectedApplication.applicant_id,
+                            'performanceRating',
+                            'Performance Rating'
+                          )}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '2px 10px',
+                            background: '#4f46e5',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                          }}
+                        >
+                          📎 View
+                        </button>
+                      )}
+                    </li>
                   )}
                 </ul>
               </div>

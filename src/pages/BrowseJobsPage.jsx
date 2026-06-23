@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
 import { getJobPostings } from "../services/jobService";
-import '../styles/BrowseJobsPage.css'; // Import the CSS file
+import '../styles/BrowseJobsPage.css';
 
 // =========================
 // PYTHON API URL
@@ -226,7 +226,6 @@ export default function BrowseJobsPage() {
     // Check each required document type
     if (requiredDocs.transcriptRecords) initialDocs.transcript = null;
     if (requiredDocs.performanceRating) initialDocs.performanceRating = null;
-    // Note: eligibilityLicense and trainingCert are no longer used
     
     setApplication({
       coverLetter: "",
@@ -258,9 +257,13 @@ export default function BrowseJobsPage() {
     });
   };
 
-  const uploadFile = async (file, folder, fileName) => {
+  // =============================================
+  // UPLOAD FILE - RETURNS BOTH URL AND FILENAME
+  // =============================================
+  const uploadFile = async (file, folder, docType) => {
     const fileExt = file.name.split('.').pop();
-    const filePath = `${folder}/${fileName}_${Date.now()}.${fileExt}`;
+    const fileName = `${docType}_${Date.now()}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
     
     const { error } = await supabase.storage
       .from('applicant_docs')
@@ -272,7 +275,7 @@ export default function BrowseJobsPage() {
       .from('applicant_docs')
       .getPublicUrl(filePath);
     
-    return publicUrl;
+    return { publicUrl, fileName };
   };
 
   const getOrCreateApplicant = async (user) => {
@@ -328,113 +331,123 @@ export default function BrowseJobsPage() {
         return;
       }
 
-     if (existingApp) {
-  if (existingApp.status === 'WITHDRAWN') {
-    // STEP 1: Validate PDS file
-    const pdsFile = application.documents.pds;
-    if (!pdsFile) {
-      alert('Please upload your Personal Data Sheet (PDS)');
-      setSubmitting(false);
-      return;
-    }
+      if (existingApp) {
+        if (existingApp.status === 'WITHDRAWN') {
+          // STEP 1: Validate PDS file
+          const pdsFile = application.documents.pds;
+          if (!pdsFile) {
+            alert('Please upload your Personal Data Sheet (PDS)');
+            setSubmitting(false);
+            return;
+          }
 
-    // STEP 2: Screen PDS with Python API (RE-RUN AI)
-    let screeningResult;
-    try {
-      screeningResult = await screenPDSWithAPI(pdsFile, selectedJob);
-    } catch (apiError) {
-      alert('Error screening PDS: ' + apiError.message);
-      setSubmitting(false);
-      return;
-    }
+          // STEP 2: Screen PDS with Python API (RE-RUN AI)
+          let screeningResult;
+          try {
+            screeningResult = await screenPDSWithAPI(pdsFile, selectedJob);
+          } catch (apiError) {
+            alert('Error screening PDS: ' + apiError.message);
+            setSubmitting(false);
+            return;
+          }
 
-    if (!screeningResult.success) {
-      alert('Error screening PDS: ' + (screeningResult.error || 'Unknown error'));
-      setSubmitting(false);
-      return;
-    }
+          if (!screeningResult.success) {
+            alert('Error screening PDS: ' + (screeningResult.error || 'Unknown error'));
+            setSubmitting(false);
+            return;
+          }
 
-    // STEP 3: Save screening result
-    setScreeningResult(screeningResult);
+          // STEP 3: Save screening result
+          setScreeningResult(screeningResult);
 
-    // STEP 4: Upload new documents (if any)
-    const uploadedDocs = {};
-    for (const [docType, file] of Object.entries(application.documents)) {
-      if (file && docType !== 'pds') {
-        const url = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, docType);
-        uploadedDocs[docType] = url;
+          // STEP 4: Upload new documents and store filenames
+          const uploadedDocs = {};
+          const docFileNames = {};
+          
+          for (const [docType, file] of Object.entries(application.documents)) {
+            if (file && docType !== 'pds') {
+              const result = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, docType);
+              uploadedDocs[docType] = result.publicUrl;
+              docFileNames[docType] = result.fileName;
+            }
+          }
+          
+          // Upload PDS
+          if (application.documents.pds) {
+            const result = await uploadFile(application.documents.pds, `${selectedJob.id}/${applicant.id}`, 'pds');
+            docFileNames.pds = result.fileName;
+          }
+          
+          const docsSubmitted = {};
+          for (const [docType, file] of Object.entries(application.documents)) {
+            docsSubmitted[docType] = file !== null;
+          }
+
+          // STEP 5: Update the existing application with new data
+          const { error: updateError } = await supabase
+            .from('applications')
+            .update({ 
+              status: 'PENDING',
+              docs_submitted: docsSubmitted,
+              doc_filenames: docFileNames,
+              applied_date: new Date().toISOString(),
+              ai_match_score: screeningResult.fit_analysis?.percentage || 0,
+              ai_explanation: {
+                verdict: screeningResult.fit_analysis?.verdict || 'NOT FIT',
+                breakdown: screeningResult.fit_analysis?.breakdown || {},
+                requirements_met: screeningResult.fit_analysis?.requirements_met || '0/0',
+                score: screeningResult.fit_analysis?.percentage || 0,
+                binary_percentage: screeningResult.fit_analysis?.binary_percentage || 0,
+                summary: screeningResult.explanation?.summary || '',
+                feature_breakdown: screeningResult.explanation?.feature_breakdown || [],
+                recommendations: screeningResult.explanation?.recommendations || [],
+                verdict_description: screeningResult.explanation?.verdict_description || ''
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingApp.id);
+
+          if (updateError) {
+            console.error('Error re-activating application:', updateError);
+            alert('Error re-submitting application. Please try again.');
+            setSubmitting(false);
+            return;
+          }
+
+          // STEP 6: Update applicants count
+          const { data: currentJob } = await supabase
+            .from('job_postings')
+            .select('applicants_count')
+            .eq('id', selectedJob.id)
+            .single();
+
+          const newCount = (currentJob?.applicants_count || 0) + 1;
+          await supabase
+            .from('job_postings')
+            .update({ applicants_count: newCount })
+            .eq('id', selectedJob.id);
+
+          // STEP 7: Show success popup
+          const score = screeningResult.fit_analysis?.percentage || 0;
+          const requirementsMet = screeningResult.fit_analysis?.requirements_met || '0/0';
+          
+          setSuccessData({
+            positionTitle: selectedJob.position_title,
+            score: score,
+            requirementsMet: requirementsMet
+          });
+          setShowSuccessPopup(true);
+          
+          setShowJobDetailsModal(false);
+          await loadAppliedJobs(applicant.id);
+          setSubmitting(false);
+          return;
+        }
+
+        alert('You have already applied for this position.');
+        setSubmitting(false);
+        return;
       }
-    }
-    
-    const docsSubmitted = {};
-    for (const [docType, file] of Object.entries(application.documents)) {
-      docsSubmitted[docType] = file !== null;
-    }
-
-    // STEP 5: Update the existing application with new data
-    const { error: updateError } = await supabase
-      .from('applications')
-      .update({ 
-        status: 'PENDING',
-        docs_submitted: docsSubmitted,
-        applied_date: new Date().toISOString(),
-        ai_match_score: screeningResult.fit_analysis?.percentage || 0,
-        ai_explanation: {
-          verdict: screeningResult.fit_analysis?.verdict || 'NOT FIT',
-          breakdown: screeningResult.fit_analysis?.breakdown || {},
-          requirements_met: screeningResult.fit_analysis?.requirements_met || '0/0',
-          score: screeningResult.fit_analysis?.percentage || 0,
-          binary_percentage: screeningResult.fit_analysis?.binary_percentage || 0,
-          summary: screeningResult.explanation?.summary || '',
-          feature_breakdown: screeningResult.explanation?.feature_breakdown || [],
-          recommendations: screeningResult.explanation?.recommendations || [],
-          verdict_description: screeningResult.explanation?.verdict_description || ''
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', existingApp.id);
-
-    if (updateError) {
-      console.error('Error re-activating application:', updateError);
-      alert('Error re-submitting application. Please try again.');
-      setSubmitting(false);
-      return;
-    }
-
-    // STEP 6: Update applicants count (if not already counted)
-    const { data: currentJob } = await supabase
-      .from('job_postings')
-      .select('applicants_count')
-      .eq('id', selectedJob.id)
-      .single();
-
-    const newCount = (currentJob?.applicants_count || 0) + 1;
-    await supabase
-      .from('job_postings')
-      .update({ applicants_count: newCount })
-      .eq('id', selectedJob.id);
-
-    // STEP 7: Show success popup
-    const score = screeningResult.fit_analysis?.percentage || 0;
-    const requirementsMet = screeningResult.fit_analysis?.requirements_met || '0/0';
-    
-    setSuccessData({
-      positionTitle: selectedJob.position_title,
-      score: score,
-      requirementsMet: requirementsMet
-    });
-    setShowSuccessPopup(true);
-    
-    setShowJobDetailsModal(false);
-    await loadAppliedJobs(applicant.id);
-    setSubmitting(false);
-    return;
-  }
-
-  alert('You have already applied for this position.');
-  setSubmitting(false);
-  return;
-}
 
       // STEP 2: Validate PDS file
       const pdsFile = application.documents.pds;
@@ -460,20 +473,28 @@ export default function BrowseJobsPage() {
         return;
       }
 
-      // STEP 4: Save screening result (but don't show breakdown)
+      // STEP 4: Save screening result
       setScreeningResult(screeningResult);
-      // Remove or comment out: setShowResults(true);
 
       // STEP 5: Get or create applicant record
       const applicantRecord = await getOrCreateApplicant(applicant);
       
-      // STEP 6: Upload documents
+      // STEP 6: Upload documents and store filenames
       const uploadedDocs = {};
+      const docFileNames = {};
+      
       for (const [docType, file] of Object.entries(application.documents)) {
         if (file && docType !== 'pds') {
-          const url = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, docType);
-          uploadedDocs[docType] = url;
+          const result = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, docType);
+          uploadedDocs[docType] = result.publicUrl;
+          docFileNames[docType] = result.fileName;
         }
+      }
+      
+      // Upload PDS
+      if (application.documents.pds) {
+        const result = await uploadFile(application.documents.pds, `${selectedJob.id}/${applicant.id}`, 'pds');
+        docFileNames.pds = result.fileName;
       }
       
       const docsSubmitted = {};
@@ -489,6 +510,7 @@ export default function BrowseJobsPage() {
           applicant_id: applicantRecord.id,
           status: 'PENDING',
           docs_submitted: docsSubmitted,
+          doc_filenames: docFileNames,
           applied_date: new Date().toISOString(),
           ai_match_score: screeningResult.fit_analysis?.percentage || 0,
           ai_explanation: {
@@ -514,7 +536,7 @@ export default function BrowseJobsPage() {
       
       await loadAppliedJobs(applicant.id);
       
-      // STEP 9: Show success popup instead of alert
+      // STEP 9: Show success popup
       const score = screeningResult.fit_analysis?.percentage || 0;
       const requirementsMet = screeningResult.fit_analysis?.requirements_met || '0/0';
       
@@ -525,7 +547,6 @@ export default function BrowseJobsPage() {
       });
       setShowSuccessPopup(true);
       
-      // Close the modal after showing success
       setShowJobDetailsModal(false);
       setScreeningResult(null);
       setShowResults(false);
