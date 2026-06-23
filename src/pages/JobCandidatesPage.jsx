@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import { notifyStatusChange } from '../services/notificationService';
 import { supabase } from "../lib/supabase";
 import "../styles/JobCandidatesPage.css";
+import { DocumentCheckIcon } from "../components/icons/CustomIcons";
 
 export default function JobCandidatesPage() {
   const { jobId } = useParams();
@@ -926,98 +927,113 @@ export default function JobCandidatesPage() {
                 </div>
               </div>
 
-              <div className="detail-section">
-                <h4>📄 Submitted Documents</h4>
-                <ul className="docs-list">
-                  {/* PDS - Always required */}
-                  <li>
-                    {selectedApplication.docs_submitted?.pds ? '✅' : '❌'} Personal Data Sheet (PDS)
-                    {selectedApplication.docs_submitted?.pds && (
-                      <button 
-                        className="view-doc-btn"
-                        onClick={() => viewDocument(
-                          selectedApplication.job_id,
-                          selectedApplication.applicant_id,
-                          'pds',
-                          'PDS'
-                        )}
-                        style={{
-                          marginLeft: '10px',
-                          padding: '2px 10px',
-                          background: '#4f46e5',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '11px',
-                        }}
-                      >
-                        📎 View
-                      </button>
-                    )}
-                  </li>
-                  
-                  {/* Transcript - Only if required by job */}
-                  {job?.required_docs?.transcriptRecords && (
-                    <li>
-                      {selectedApplication.docs_submitted?.transcript ? '✅' : '❌'} Transcript of Records
-                      {selectedApplication.docs_submitted?.transcript && (
-                        <button 
-                          className="view-doc-btn"
-                          onClick={() => viewDocument(
-                            selectedApplication.job_id,
-                            selectedApplication.applicant_id,
-                            'transcript',
-                            'Transcript'
-                          )}
-                          style={{
-                            marginLeft: '10px',
-                            padding: '2px 10px',
-                            background: '#4f46e5',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                          }}
-                        >
-                          📎 View
-                        </button>
-                      )}
-                    </li>
-                  )}
-                  
-                  {/* Performance Rating - Only if required by job */}
-                  {job?.required_docs?.performanceRating && (
-                    <li>
-                      {selectedApplication.docs_submitted?.performanceRating ? '✅' : '❌'} Performance Rating
-                      {selectedApplication.docs_submitted?.performanceRating && (
-                        <button 
-                          className="view-doc-btn"
-                          onClick={() => viewDocument(
-                            selectedApplication.job_id,
-                            selectedApplication.applicant_id,
-                            'performanceRating',
-                            'Performance Rating'
-                          )}
-                          style={{
-                            marginLeft: '10px',
-                            padding: '2px 10px',
-                            background: '#4f46e5',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                          }}
-                        >
-                          📎 View
-                        </button>
-                      )}
-                    </li>
-                  )}
-                </ul>
-              </div>
+             <div className="detail-section">
+  <h4>📄 Submitted Documents</h4>
+  <ul className="docs-list">
+    {/* PDS - Always required */}
+    <li>
+      {selectedApplication.docs_submitted?.pds ? (
+        <DocumentCheckIcon size={26} color="#10b981" style={{ marginRight: '4px' }} />
+      ) : (
+        <span style={{ color: '#ef4444', fontSize: '14px', marginRight: '4px' }}>✕</span>
+      )}
+      Personal Data Sheet (PDS)
+      {selectedApplication.docs_submitted?.pds && (
+        <button 
+          className="view-doc-btn"
+          onClick={() => viewDocument(
+            selectedApplication.job_id,
+            selectedApplication.applicant_id,
+            'pds',
+            'PDS'
+          )}
+          style={{
+            marginLeft: '10px',
+            padding: '2px 10px',
+            background: '#4f46e5',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+        >
+          📎 View
+        </button>
+      )}
+    </li>
+    
+    {/* Transcript - Only if required by job */}
+    {job?.required_docs?.transcriptRecords && (
+      <li>
+        {selectedApplication.docs_submitted?.transcript ? (
+          <DocumentCheckIcon size={26} color="#10b981" style={{ marginRight: '4px' }} />
+        ) : (
+          <span style={{ color: '#ef4444', fontSize: '14px', marginRight: '4px' }}>✕</span>
+        )}
+        Transcript of Records
+        {selectedApplication.docs_submitted?.transcript && (
+          <button 
+            className="view-doc-btn"
+            onClick={() => viewDocument(
+              selectedApplication.job_id,
+              selectedApplication.applicant_id,
+              'transcript',
+              'Transcript'
+            )}
+            style={{
+              marginLeft: '10px',
+              padding: '2px 10px',
+              background: '#4f46e5',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            📎 View
+          </button>
+        )}
+      </li>
+    )}
+    
+    {/* Performance Rating - Only if required by job */}
+    {job?.required_docs?.performanceRating && (
+      <li>
+        {selectedApplication.docs_submitted?.performanceRating ? (
+          <DocumentCheckIcon size={26} color="#10b981" style={{ marginRight: '4px' }} />
+        ) : (
+          <span style={{ color: '#ef4444', fontSize: '22px', marginLeft: '4px' }}>✕</span>
+        )}
+        Performance Rating
+        {selectedApplication.docs_submitted?.performanceRating && (
+          <button 
+            className="view-doc-btn"
+            onClick={() => viewDocument(
+              selectedApplication.job_id,
+              selectedApplication.applicant_id,
+              'performanceRating',
+              'Performance Rating'
+            )}
+            style={{
+              marginLeft: '10px',
+              padding: '2px 10px',
+              background: '#4f46e5',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            📎 View
+          </button>
+        )}
+      </li>
+    )}
+  </ul>
+</div>
 
               <div className="detail-section">
                 <h4>Qualifications</h4>
