@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
+import { BriefcaseIcon, ConfettiIcon,  DocumentListIcon } from "../components/icons/CustomIcons";
 
 export default function CandidatesPage() {
   const navigate = useNavigate();
@@ -421,7 +422,18 @@ export default function CandidatesPage() {
 
       <div className="candidates-container">
         <div className="page-header">
-          <h1>📋 Applications</h1>
+       <h1 style={{ 
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '10px',
+  background: '#ececec',
+  padding: '12px 20px',
+  borderRadius: '8px',
+  margin: 0
+}}>
+  <DocumentListIcon color="red" size={33} />
+  Applications
+</h1>
           <p>View and manage all job applications across all postings</p>
         </div>
 

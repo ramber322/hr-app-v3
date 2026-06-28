@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
 import "../styles/DashboardPage.css";
-import { WelcomeIcon, CalendarIcon, MyApplicationsIcon } from "../components/icons/CustomIcons";
+import { ConfettiIcon, WelcomeIcon, CalendarIcon, MyApplicationsIcon, BriefcaseIcon, DocumentListIcon } from "../components/icons/CustomIcons";
 
 // Chart.js imports
 import {
@@ -56,14 +56,12 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         navigate('/login');
         return;
       }
 
-      // 1. Fetch all jobs
       const { data: jobs, error: jobsError } = await supabase
         .from('job_postings')
         .select('*');
@@ -73,7 +71,6 @@ export default function DashboardPage() {
       const totalJobs = jobs.length;
       const openJobs = jobs.filter(j => j.status === 'OPEN').length;
 
-      // 2. Fetch all applications (non-withdrawn)
       const { data: applications, error: appsError } = await supabase
         .from('applications')
         .select('*, job_postings(position_title)')
@@ -84,7 +81,6 @@ export default function DashboardPage() {
       const totalApplicants = applications.length;
       const hired = applications.filter(a => a.status === 'HIRED').length;
 
-      // 3. Status breakdown - Grouped into 4 categories
       const statusGroups = {
         'Pending': 0,
         'Under Review': 0,
@@ -114,7 +110,6 @@ export default function DashboardPage() {
         openJobs,
       });
 
-      // 4. Recent activity (last 10)
       const sortedApps = [...applications].sort((a, b) => 
         new Date(b.applied_date) - new Date(a.applied_date)
       ).slice(0, 10);
@@ -128,7 +123,6 @@ export default function DashboardPage() {
       }));
       setRecentActivity(activity);
 
-      // 5. Build calendar
       buildCalendar(currentMonth);
 
     } catch (error) {
@@ -148,7 +142,6 @@ export default function DashboardPage() {
     
     const days = [];
     
-    // Previous month days
     for (let i = firstDay - 1; i >= 0; i--) {
       days.push({
         day: daysInPrevMonth - i,
@@ -156,7 +149,6 @@ export default function DashboardPage() {
       });
     }
     
-    // Current month days
     for (let i = 1; i <= daysInMonth; i++) {
       days.push({
         day: i,
@@ -164,7 +156,6 @@ export default function DashboardPage() {
       });
     }
     
-    // Next month days
     const remaining = 42 - days.length;
     for (let i = 1; i <= remaining; i++) {
       days.push({
@@ -291,41 +282,41 @@ export default function DashboardPage() {
     'Rejected': { bg: '#FFEBEE', color: '#C62828', barColor: '#F44336' },
   };
 
-  // Stats cards data
   const statCards = [
-    {
-      title: 'Total Jobs',
-      value: stats.totalJobs,
-      change: '+1.4%',
-      icon: '💼',
-      color: '#4f46e5',
-      bgColor: '#eef2ff',
-    },
-    {
-      title: 'Total Applications',
-      value: stats.totalApplicants,
-      change: '+2.4%',
-      icon: '👥',
-      color: '#10b981',
-      bgColor: '#ecfdf5',
-    },
-    {
-      title: 'Total Hired',
-      value: stats.totalHired,
-      change: '+1.2%',
-      icon: '🎉',
-      color: '#f59e0b',
-      bgColor: '#fffbeb',
-    },
-    {
-      title: 'Open Jobs',
-      value: stats.openJobs,
-      change: '-0.8%',
-      icon: '📌',
-      color: '#ef4444',
-      bgColor: '#fef2f2',
-    },
-  ];
+  {
+    title: 'Total Jobs',
+    value: stats.totalJobs,
+    change: '+1.4%',
+    icon: BriefcaseIcon,
+    color: '#4f46e5',
+    bgColor: '#eef2ff',
+  },
+  {
+    title: 'Total Applications',
+    value: stats.totalApplicants,
+    change: '+2.4%',
+    icon: DocumentListIcon,
+    color: '#ff6131',  // Now this will work!
+    bgColor: '#fff7ed', // Light orange background
+    iconSize: 12,
+  },
+  {
+    title: 'Total Hired',
+    value: stats.totalHired,
+    change: '+1.2%',
+    icon: ConfettiIcon,
+    color: '#48eb79',
+    bgColor: 'rgb(226, 255, 239)',
+  },
+  {
+    title: 'Open Jobs',
+    value: stats.openJobs,
+    change: '-0.8%',
+    icon: '📌',
+    color: '#ef4444',
+    bgColor: '#fef2f2',
+  },
+];
 
   // Month name for calendar
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -370,6 +361,7 @@ export default function DashboardPage() {
       padding: 20px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
       transition: all 0.3s;
+      text-align: center;
     }
 
     .stat-card:hover {
@@ -378,9 +370,13 @@ export default function DashboardPage() {
     }
 
     .stat-card .stat-icon {
-      font-size: 20px;
-      margin-bottom: 8px;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 8px auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
     }
 
     .stat-card .stat-value {
@@ -454,7 +450,6 @@ export default function DashboardPage() {
       position: relative;
     }
 
-    /* Status Breakdown List */
     .status-list {
       padding: 4px 0;
     }
@@ -564,7 +559,6 @@ export default function DashboardPage() {
       font-size: 14px;
     }
 
-    /* Calendar */
     .calendar-header {
       display: flex;
       justify-content: space-between;
@@ -657,8 +651,6 @@ export default function DashboardPage() {
       .dashboard-grid { grid-template-columns: 1fr; }
       .dashboard-card .card-body { padding: 16px; }
       .chart-container { height: 220px; }
-      .document-chart { width: 140px; height: 140px; }
-      .document-container { height: 220px; }
     }
   `;
 
@@ -689,16 +681,34 @@ export default function DashboardPage() {
 
         {/* Stats Cards */}
         <div className="stats-grid">
-          {statCards.map((card, index) => (
-            <div key={index} className="stat-card">
-              <span className="stat-icon">{card.icon}</span>
-              <span className="stat-value">{card.value}</span>
-              <span className="stat-title">{card.title}</span>
-              <span className={`stat-change ${card.change.startsWith('+') ? 'positive' : 'negative'}`}>
-                {card.change} vs last month
-              </span>
-            </div>
-          ))}
+          {statCards.map((card, index) => {
+            const IconComponent = card.icon;
+            // Check if the icon is a component or a string (emoji)
+            const isComponent = typeof IconComponent === 'function' || typeof IconComponent === 'object';
+            
+            return (
+              <div key={index} className="stat-card">
+                <div
+                  className="stat-icon"
+                  style={{
+                    background: card.bgColor,
+                    color: card.color,
+                  }}
+                >
+                  {isComponent ? (
+                    <IconComponent size={28} />
+                  ) : (
+                    <span style={{ fontSize: '20px' }}>{card.icon}</span>
+                  )}
+                </div>
+                <span className="stat-value">{card.value}</span>
+                <span className="stat-title">{card.title}</span>
+                <span className={`stat-change ${card.change.startsWith('+') ? 'positive' : 'negative'}`}>
+                  {card.change} vs last month
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Main Grid: Charts */}
