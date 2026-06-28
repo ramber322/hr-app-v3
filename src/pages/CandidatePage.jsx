@@ -426,7 +426,7 @@ export default function CandidatesPage() {
   display: 'flex', 
   alignItems: 'center', 
   gap: '10px',
-  background: '#ececec',
+  background: '#f0eded',
   padding: '12px 20px',
   borderRadius: '8px',
   margin: 0
